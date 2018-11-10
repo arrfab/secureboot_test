@@ -21,6 +21,10 @@ if [ -z "$1" ] ; then
 fi
 }
 
+# Some defined variables
+# need a specific OVMF that has the MS keys rolled-in
+# should land in 7.6.1810 but not yet available and signed on mirrors
+ovmf_rpm="https://buildlogs.centos.org/c7.1810.00.x86_64/ovmf/20181102155537/20180508-3.gitee3198e672e2.el7.x86_64/OVMF-20180508-3.gitee3198e672e2.el7.noarch.rpm"
 
 while getopts "hk:s:g:" option
 do
@@ -54,6 +58,7 @@ echo ""
 echo "  SHIM : $shim_rpm"
 echo "  Grub2 : $grub2_rpm"
 echo "  kernel : $kernel_rpm"
+echo "  OVMF : $ovmf_rpm"
 echo ""
 echo "==================================================="
 
@@ -70,7 +75,7 @@ for pkg_url in $shim_rpm $kernel_rpm $grub2_rpm $ovmf_rpm; do
   fi
   pkg_file=$(echo $pkg_url|rev|cut -f 1 -d '/'|rev)
   echo "### Extracting file from $pkg_file"
-  rpm2cpio $pkg_file|cpio -ivdm
+  rpm2cpio $pkg_file|cpio -idm
 
 done
 popd
@@ -82,9 +87,10 @@ grub2_file=$(find $workdir -name 'grubx64.efi')
 
 # Installing required pkgs
 echo "[+] Installing now required yum packages ..."
-yum install centos-release-qemu-ev -y
-yum install qemu-kvm-tools qemu-kvm virt-install libvirt libvirt-python OVMF  -y
-yum install -y git pesign dosfstools
+yum install -d0 centos-release-qemu-ev -y
+yum install -d0 qemu-kvm-tools qemu-kvm virt-install libvirt libvirt-python -y
+yum install -y -d0 git pesign dosfstools
+yum localinstall -d0 -y ${workdir}/OVMF*
 
 
 if [ ! -d qemu-secureboot-tester ];
@@ -92,8 +98,28 @@ then
     git clone https://github.com/puiterwijk/qemu-secureboot-tester.git
 fi
 
+# Validating if we need to sign shim or if it's already signed by Microsoft
+rpm -qip $workdir/shim*|grep -q unsigned && shim_is_signed=False || shim_is_signed=True
+
+
+echo " Test [1/1] : Validating that we can boot the whole chain : shim, grub2, kernel"
 
 staging_dir=$(mktemp -d -p /var/tmp)
+if [ "$shim_is_signed" == "True" ] ; then
+  echo "$shim_file is supposed to be signed, so testing about Microsoft MOK ..."
+python qemu-secureboot-tester/sbtest \
+  --qemu-binary /usr/libexec/qemu-kvm \
+  --verbose \
+  --print-output \
+  --enable-kvm \
+  --test-signed \
+  --ovmf-binary /usr/share/OVMF/OVMF_CODE.secboot.fd \
+  --ovmf-template-vars /usr/share/OVMF/OVMF_VARS.secboot.fd \
+  --expect-cert "CentOS Secure Boot (key 1): f037c6eaec36d4057a526c0ec6d5a95b324ee129" \
+  --expect-cert "Red Hat Inc.: 1ff96dd8d1b2327228c04b03a772dbb2dbb79b1f" \
+   $shim_file $grub2_file $kernel_file
+else
+   echo "$shim_file is supposed to be unsigned, so auto-signing it to validate other pkgs ..."
 python qemu-secureboot-tester/sbtest \
   --qemu-binary /usr/libexec/qemu-kvm \
   --verbose \
@@ -104,6 +130,7 @@ python qemu-secureboot-tester/sbtest \
   --expect-cert "CentOS Secure Boot (key 1): f037c6eaec36d4057a526c0ec6d5a95b324ee129" \
   --expect-cert "Red Hat Inc.: 1ff96dd8d1b2327228c04b03a772dbb2dbb79b1f" \
    $shim_file $grub2_file $kernel_file
+fi
 
 
 if [ "$?" -eq "0" ] ;then
