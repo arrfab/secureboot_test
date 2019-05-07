@@ -100,7 +100,8 @@ fi
 
 # Validating if we need to sign shim or if it's already signed by Microsoft
 rpm -qip $workdir/shim*|grep -q unsigned && shim_is_signed=False || shim_is_signed=True
-
+# Testing if we are on CentOS 8, in case we don't need to validate old Digicert cert
+rpm -qip $workdir/shim*|grep -q el8 && old_cert_check='\' || old_cert_check='--expect-cert "Red Hat Inc.: 1ff96dd8d1b2327228c04b03a772dbb2dbb79b1f" \'
 
 echo " Test [1/1] : Validating that we can boot the whole chain : shim, grub2, kernel"
 
@@ -116,7 +117,7 @@ python qemu-secureboot-tester/sbtest \
   --ovmf-binary /usr/share/OVMF/OVMF_CODE.secboot.fd \
   --ovmf-template-vars /usr/share/OVMF/OVMF_VARS.secboot.fd \
   --expect-cert "CentOS Secure Boot (key 1): f037c6eaec36d4057a526c0ec6d5a95b324ee129" \
-  --expect-cert "Red Hat Inc.: 1ff96dd8d1b2327228c04b03a772dbb2dbb79b1f" \
+  ${old_cert_check}
    $shim_file $grub2_file $kernel_file
 else
    echo "$shim_file is supposed to be unsigned, so auto-signing it to validate other pkgs ..."
@@ -128,7 +129,7 @@ python qemu-secureboot-tester/sbtest \
   --ovmf-binary /usr/share/OVMF/OVMF_CODE.secboot.fd \
   --ovmf-template-vars /usr/share/OVMF/OVMF_VARS.fd \
   --expect-cert "CentOS Secure Boot (key 1): f037c6eaec36d4057a526c0ec6d5a95b324ee129" \
-  --expect-cert "Red Hat Inc.: 1ff96dd8d1b2327228c04b03a772dbb2dbb79b1f" \
+  ${old_cert_check}
    $shim_file $grub2_file $kernel_file
 fi
 
