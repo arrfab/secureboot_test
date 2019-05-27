@@ -24,7 +24,7 @@ fi
 # Some defined variables
 # need a specific OVMF that has the MS keys rolled-in
 # should land in 7.6.1810 but not yet available and signed on mirrors
-ovmf_rpm="https://buildlogs.centos.org/c7.1810.00.x86_64/ovmf/20181102155537/20180508-3.gitee3198e672e2.el7.x86_64/OVMF-20180508-3.gitee3198e672e2.el7.noarch.rpm"
+ovmf_rpm="http://mirror.centos.org/centos/7/os/x86_64/Packages/OVMF-20180508-3.gitee3198e672e2.el7.noarch.rpm
 
 while getopts "hk:s:g:" option
 do
